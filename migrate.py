@@ -12,8 +12,8 @@ import re
 import getpass
 
 # constants
-GIT_MIGRATE_STREAM = 'git_migrate'
-GIT_MIGRATE_WORKSPACE = 'git_migrate_work'
+GIT_MIGRATE_STREAM_POSFIX = 'MIG'
+GIT_MIGRATE_WORKSPACE_POSFIX = 'MIG_work'
 
 
 class FullPaths(argparse.Action):
@@ -70,7 +70,7 @@ def is_used_dest(dirname, depot):
         wksps.append([wksp.attrib['Name'], wksp.attrib['Storage']])
     for wksp in wksps:
         if dirname.replace('\\', '/').lower() in wksp[1].lower():
-            if (depot + '_' + GIT_MIGRATE_WORKSPACE).lower() in wksp[0].lower():
+            if (depot + '_' + GIT_MIGRATE_WORKSPACE_POSFIX).lower() in wksp[0].lower():
                 break
             else:
                 msg = 'ERROR: folder "{}" is already used by {} workspace\nChoose another destination folder'.format(
@@ -190,21 +190,21 @@ def accurev_init(depot, stream, destination):
     :param destination: folder to migrate sources to
     """
     # create migration stream
-    output = exec_cmd(['accurev', 'mkstream', '-s', depot + '_' + GIT_MIGRATE_STREAM, '-b', stream], fail=False)
+    output = exec_cmd(['accurev', 'mkstream', '-s', depot + '_' + GIT_MIGRATE_STREAM_POSFIX, '-b', stream], fail=False)
     if 'already exists' in output:
-        move = exec_cmd(['accurev', 'chstream', '-s', depot + '_' + GIT_MIGRATE_STREAM, '-b', stream], fail=False)
+        move = exec_cmd(['accurev', 'chstream', '-s', depot + '_' + GIT_MIGRATE_STREAM_POSFIX, '-b', stream], fail=False)
         if 'Unknown stream or ver spec' in move:
             sys.exit(move)
     # create migration workspace
     output = exec_cmd(
-        ['accurev', 'mkws', '-w', depot + '_' + GIT_MIGRATE_WORKSPACE, '-b', depot + '_' + GIT_MIGRATE_STREAM, '-l',
+        ['accurev', 'mkws', '-w', depot + '_' + GIT_MIGRATE_WORKSPACE_POSFIX, '-b', depot + '_' + GIT_MIGRATE_STREAM_POSFIX, '-l',
          destination],
         fail=False)
     # if location already in use then move the workspace instead of creating it
     if 'Existing workspace/ref tree' or 'already exists' in output:
         move = exec_cmd(
-            ['accurev', 'chws', '-w', depot + '_' + GIT_MIGRATE_WORKSPACE, '-l', destination, '-b',
-             depot + '_' + GIT_MIGRATE_STREAM],
+            ['accurev', 'chws', '-w', depot + '_' + GIT_MIGRATE_WORKSPACE_POSFIX, '-l', destination, '-b',
+             depot + '_' + GIT_MIGRATE_STREAM_POSFIX],
             fail=False)
         if 'ERROR:' in move:
             sys.exit(move)
@@ -241,7 +241,7 @@ def accurev_pop(depot, transaction_id):
     # move temporary stream to specified transaction
     print '[AccuRev] get transaction: {}...'.format(transaction_id)
 
-    output = exec_cmd(['accurev', 'chstream', '-s', depot + '_' + GIT_MIGRATE_STREAM, '-t', transaction_id], fail=False)
+    output = exec_cmd(['accurev', 'chstream', '-s', depot + '_' + GIT_MIGRATE_STREAM_POSFIX, '-t', transaction_id], fail=False)
     # check for network error and retry
     if 'ERROR:' in output:
         if 'network error' or 'Communications failure' in output:
@@ -380,7 +380,7 @@ def git_migrate(logfile, stream, destination, append, depot):
         # initial populate to get sources inherited from the parent streams
         print 'Perform first time AccuRev populate...'
         first_tr_id = transactions[0][0]
-        exec_cmd(['accurev', 'chstream', '-s', depot + '_' + GIT_MIGRATE_STREAM, '-t', first_tr_id])
+        exec_cmd(['accurev', 'chstream', '-s', depot + '_' + GIT_MIGRATE_STREAM_POSFIX, '-t', first_tr_id])
         exec_cmd(['accurev', 'pop', '-O', '-R', '-t', 'now', '.'])
 
     else:
