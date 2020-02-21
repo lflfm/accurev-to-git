@@ -1,6 +1,8 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 
+from __future__ import print_function
+
 import argparse
 import tempfile
 import subprocess
@@ -35,7 +37,7 @@ def is_stream(stream):
     if accurevcheck:
         if accurevcheck == 52:
             msg = 'Expired or invalid AccuRev session token. Please enter your credentials.\n'
-            print msg
+            print(msg)
             username = raw_input('AccuRev username: ')
             password = getpass.getpass()
             loggedin = accurev_login(username, password)
@@ -97,7 +99,7 @@ def get_history(branch):
     :param branch: AccuRev branch for which history will be created
     :return: location of history xml file
     """
-    print 'Reading AccuRev history...'
+    print('Reading AccuRev history...')
     logfile = tempfile.gettempdir() + '/accHist.xml'
     with open(logfile, 'w') as f:
         f.write(exec_cmd(['accurev', 'hist', '-a', '-s', branch, '-fx']))
@@ -238,13 +240,13 @@ def accurev_pop(stream, transaction_id):
     :param transaction_id: transaction ID at which to perform the update
     """
     # move temporary stream to specified transaction
-    print '[AccuRev] get transaction: {}...'.format(transaction_id)
+    print('[AccuRev] get transaction: {}...'.format(transaction_id))
 
     output = exec_cmd(['accurev', 'chstream', '-s', stream + '_' + GIT_MIGRATE_STREAM_POSFIX, '-t', transaction_id], fail=False)
     # check for network error and retry
     if 'ERROR:' in output:
         if 'network error' or 'Communications failure' in output:
-            print 'Retry "accurev chstream" for transaction: {}'.format(transaction_id)
+            print('Retry "accurev chstream" for transaction: {}'.format(transaction_id))
             exec_cmd(['accurev', 'update'])
         else:
             sys.exit(output)
@@ -254,7 +256,7 @@ def accurev_pop(stream, transaction_id):
     # check for update failed due to some delayed file locks and retry
     if 'ERROR:' in output:
         if 'Some files could not be updated' or 'network error' or 'Communications failure' in output:
-            print 'Retry "accurev update" for transaction: {}'.format(transaction_id)
+            print('Retry "accurev update" for transaction: {}'.format(transaction_id))
             exec_cmd(['accurev', 'update'])
         else:
             sys.exit(output)
@@ -270,14 +272,14 @@ def git_commit(message, transaction_id, author, timestamp):
     """
 
     # add all changes (modified, new, deleted) to Git index
-    print '[Git] add changes to index...'
+    print('[Git] add changes to index...')
     exec_cmd(['git', 'add', '--all'])
 
     # temporary file used to format the commit message
     with tempfile.NamedTemporaryFile(delete=False) as f:
         f.write('{} \n\n[AccuRev transaction: {}]'.format(message, transaction_id))
 
-    print '[Git] commit changes...'
+    print('[Git] commit changes...')
     output = exec_cmd(['git', 'commit', '--file={}'.format(f.name), '--author="AccuRev user {} <>"'.format(author),
                        '--date="{}"'.format(timestamp)], fail=False)
     # in case of error check if commit failed with 'nothing to commit' otherwise exit
@@ -294,7 +296,7 @@ def get_last_transaction_id():
 
     :return: last AccuRev transaction ID stored in the git repository
     """
-    print 'Searching last migrated AccuRev transaction in Git commit logs...'
+    print('Searching last migrated AccuRev transaction in Git commit logs...')
     log = exec_cmd(['git', 'log', '-1'])
     match = re.search(r'\[AccuRev transaction: (\d+)\]', log)
     count = 1
@@ -305,7 +307,7 @@ def get_last_transaction_id():
         if count > 100:
             raise StandardError('ERROR: Unable to find AccuRev transaction in recent Git commit history')
 
-    print 'Last migrated AccuRev transaction found: {}'.format(match.group(1))
+    print('Last migrated AccuRev transaction found: {}'.format(match.group(1)))
     return match.group(1)
 
 
@@ -371,27 +373,27 @@ def git_migrate(logfile, stream, destination, append):
     # prepare for migration
     os.chdir(destination)
     if not append:
-        print 'Prepare for migration...'
+        print('Prepare for migration...')
         accurev_init(stream, destination)
         git_init(destination)
 
         # initial populate to get sources inherited from the parent streams
-        print 'Perform first time AccuRev populate...'
+        print('Perform first time AccuRev populate...')
         first_tr_id = transactions[0][0]
         exec_cmd(['accurev', 'chstream', '-s', stream + '_' + GIT_MIGRATE_STREAM_POSFIX, '-t', first_tr_id])
         exec_cmd(['accurev', 'pop', '-O', '-R', '-t', 'now', '.'])
 
     else:
-        print 'Resume migration...'
+        print('Resume migration...')
         last_tr_id = get_last_transaction_id()
         position = get_position(transactions, last_tr_id)
         transactions = transactions[position + 1:]
 
-    print 'Migrate AccuRev transactions...'
+    print('Migrate AccuRev transactions...')
     for item in transactions:
         pop_and_add(stream, item)
 
-    print 'Migration completed successfully.'
+    print('Migration completed successfully.')
 
 
 def main():
