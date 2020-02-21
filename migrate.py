@@ -53,12 +53,12 @@ def is_stream(stream):
         return stream
 
 
-def is_used_dest(dirname, depot):
+def is_used_dest(dirname, stream):
     """Check to see if the location is already associated with an AccuRev wksp different than the one used by
     the current migration workspace as this prevents creating new workspaces with that destination.
 
     :param dirname: folder to check if associated with existing AccuRev workspace
-    :param depot: AccuRev depot
+    :param stream: AccuRev stream
     """
     wkspfile = tempfile.gettempdir() + '/accWksp.xml'
     with open(wkspfile, 'w') as f:
@@ -70,7 +70,7 @@ def is_used_dest(dirname, depot):
         wksps.append([wksp.attrib['Name'], wksp.attrib['Storage']])
     for wksp in wksps:
         if dirname.replace('\\', '/').lower() in wksp[1].lower():
-            if (depot + '_' + GIT_MIGRATE_WORKSPACE_POSFIX).lower() in wksp[0].lower():
+            if (stream + '_' + GIT_MIGRATE_WORKSPACE_POSFIX).lower() in wksp[0].lower():
                 break
             else:
                 msg = 'ERROR: folder "{}" is already used by {} workspace\nChoose another destination folder'.format(
@@ -182,29 +182,28 @@ def accurev_login(username, password):
         return False
 
 
-def accurev_init(depot, stream, destination):
+def accurev_init(stream, destination):
     """
     Create stream and workspace for migration to Git
-    :param depot: AccuRev depot name
     :param stream: AccuRev stream to migrate sources from
     :param destination: folder to migrate sources to
     """
     # create migration stream
-    output = exec_cmd(['accurev', 'mkstream', '-s', depot + '_' + GIT_MIGRATE_STREAM_POSFIX, '-b', stream], fail=False)
+    output = exec_cmd(['accurev', 'mkstream', '-s', stream + '_' + GIT_MIGRATE_STREAM_POSFIX, '-b', stream], fail=False)
     if 'already exists' in output:
-        move = exec_cmd(['accurev', 'chstream', '-s', depot + '_' + GIT_MIGRATE_STREAM_POSFIX, '-b', stream], fail=False)
+        move = exec_cmd(['accurev', 'chstream', '-s', stream + '_' + GIT_MIGRATE_STREAM_POSFIX, '-b', stream], fail=False)
         if 'Unknown stream or ver spec' in move:
             sys.exit(move)
     # create migration workspace
     output = exec_cmd(
-        ['accurev', 'mkws', '-w', depot + '_' + GIT_MIGRATE_WORKSPACE_POSFIX, '-b', depot + '_' + GIT_MIGRATE_STREAM_POSFIX, '-l',
+        ['accurev', 'mkws', '-w', stream + '_' + GIT_MIGRATE_WORKSPACE_POSFIX, '-b', stream + '_' + GIT_MIGRATE_STREAM_POSFIX, '-l',
          destination],
         fail=False)
     # if location already in use then move the workspace instead of creating it
     if 'Existing workspace/ref tree' or 'already exists' in output:
         move = exec_cmd(
-            ['accurev', 'chws', '-w', depot + '_' + GIT_MIGRATE_WORKSPACE_POSFIX, '-l', destination, '-b',
-             depot + '_' + GIT_MIGRATE_STREAM_POSFIX],
+            ['accurev', 'chws', '-w', stream + '_' + GIT_MIGRATE_WORKSPACE_POSFIX, '-l', destination, '-b',
+             stream + '_' + GIT_MIGRATE_STREAM_POSFIX],
             fail=False)
         if 'ERROR:' in move:
             sys.exit(move)
@@ -231,17 +230,17 @@ def git_init(destination):
         f.write('.accurev')
 
 
-def accurev_pop(depot, transaction_id):
+def accurev_pop(stream, transaction_id):
     """
     Get accurev source tree based on a transaction id
 
-    :param depot: AccuRev depot name
+    :param stream: AccuRev stream name
     :param transaction_id: transaction ID at which to perform the update
     """
     # move temporary stream to specified transaction
     print '[AccuRev] get transaction: {}...'.format(transaction_id)
 
-    output = exec_cmd(['accurev', 'chstream', '-s', depot + '_' + GIT_MIGRATE_STREAM_POSFIX, '-t', transaction_id], fail=False)
+    output = exec_cmd(['accurev', 'chstream', '-s', stream + '_' + GIT_MIGRATE_STREAM_POSFIX, '-t', transaction_id], fail=False)
     # check for network error and retry
     if 'ERROR:' in output:
         if 'network error' or 'Communications failure' in output:
@@ -310,10 +309,10 @@ def get_last_transaction_id():
     return match.group(1)
 
 
-def pop_and_add(depot, transaction):
+def pop_and_add(stream, transaction):
     """Get sources from AccuRev and commit them in git
 
-    :param depot: AccuRev depot name
+    :param stream: AccuRev stream name
     :param transaction: AccuRev transaction used to retrieve the sources
     """
     tr_id = transaction[0]
@@ -323,7 +322,7 @@ def pop_and_add(depot, transaction):
     commit_msg = sanitize_message(message)
 
     # get sources corresponding to a transaction id
-    accurev_pop(depot, tr_id)
+    accurev_pop(stream, tr_id)
 
     # commit changes to Git
     git_commit(commit_msg, tr_id, author, timestamp)
@@ -351,14 +350,13 @@ def get_depot(stream):
     sys.exit(msg)
 
 
-def git_migrate(logfile, stream, destination, append, depot):
+def git_migrate(logfile, stream, destination, append):
     """Populate files from AccuRev based on history and commit them in git
 
     :param logfile: XML file containing the history of an AccuRev stream
     :param stream: AccuRev stream to be migrated
     :param destination: location of the git repository
     :param append: add only changes not already in git repository if prior migration was performed
-    :param depot: AccuRev depot name
     """
     tree = ElemTree.parse(logfile)
     root = tree.getroot()
@@ -374,13 +372,13 @@ def git_migrate(logfile, stream, destination, append, depot):
     os.chdir(destination)
     if not append:
         print 'Prepare for migration...'
-        accurev_init(depot, stream, destination)
+        accurev_init(stream, destination)
         git_init(destination)
 
         # initial populate to get sources inherited from the parent streams
         print 'Perform first time AccuRev populate...'
         first_tr_id = transactions[0][0]
-        exec_cmd(['accurev', 'chstream', '-s', depot + '_' + GIT_MIGRATE_STREAM_POSFIX, '-t', first_tr_id])
+        exec_cmd(['accurev', 'chstream', '-s', stream + '_' + GIT_MIGRATE_STREAM_POSFIX, '-t', first_tr_id])
         exec_cmd(['accurev', 'pop', '-O', '-R', '-t', 'now', '.'])
 
     else:
@@ -391,7 +389,7 @@ def git_migrate(logfile, stream, destination, append, depot):
 
     print 'Migrate AccuRev transactions...'
     for item in transactions:
-        pop_and_add(depot, item)
+        pop_and_add(stream, item)
 
     print 'Migration completed successfully.'
 
@@ -402,10 +400,10 @@ def main():
     """
     args = get_args()
     # try and get the depot from the stream name (separate by first underscore)
-    depot = get_depot(args[0])
-    is_used_dest(args[1], depot)
+    # depot = get_depot(args[0])
+    is_used_dest(args[1], args[0])
     logfile = get_history(args[0])
-    git_migrate(logfile, args[0], args[1], args[2], depot)
+    git_migrate(logfile, args[0], args[1], args[2])
 
 
 if __name__ == '__main__':
